@@ -1,0 +1,5 @@
+.env
+bank_transactions_clean.csv
+bank_transactions.csv
+__pycache__/
+.venv/
