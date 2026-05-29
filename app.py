@@ -8,30 +8,44 @@ from dotenv import load_dotenv
 
 # ── Page config ──────────────────────────────────────────
 st.set_page_config(
-    page_title="PFM Dashboard",
+    page_title="PFM AI Assistant",
     page_icon="💰",
     layout="wide"
 )
-
-# ── Load data ─────────────────────────────────────────────
-@st.cache_data
-def load_data():
-    df = pd.read_csv('bank_transactions_clean.csv',
-                     parse_dates=['DATE'])
-    return df
-
-df = load_data()
 
 # ── Groq client ───────────────────────────────────────────
 load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# ── Sidebar filters ───────────────────────────────────────
+# ── Load data ─────────────────────────────────────────────
+@st.cache_data
+def load_data(source):
+    if source == '🇰🇿 Kazakhstan (Simulated)':
+        df = pd.read_csv('kz_transactions.csv', parse_dates=['DATE'])
+    else:
+        df = pd.read_csv('bank_transactions_clean.csv', parse_dates=['DATE'])
+    return df
+
+# ── Sidebar ───────────────────────────────────────────────
 st.sidebar.title("🔍 Filters")
 
+# Dataset selector
+data_source = st.sidebar.radio(
+    "📂 Dataset",
+    ['🇰🇿 Kazakhstan (Simulated)', '🇮🇳 India (Real)']
+)
+
+# Currency based on dataset
+currency = '₸' if '🇰🇿' in data_source else '₹'
+
+# Load data
+df = load_data(data_source)
+
+# Account selector
 accounts = ['All'] + sorted(df['Account No'].unique().tolist())
 selected_account = st.sidebar.selectbox("Select Account", accounts)
 
+# Date range
 min_date = df['DATE'].min()
 max_date = df['DATE'].max()
 start_date, end_date = st.sidebar.date_input(
@@ -41,6 +55,7 @@ start_date, end_date = st.sidebar.date_input(
     max_value=max_date
 )
 
+# Transaction type
 trans_type = st.sidebar.radio(
     "Transaction Type",
     ['All', 'DEBIT', 'CREDIT']
@@ -62,7 +77,10 @@ if trans_type != 'All':
 
 # ── Header ────────────────────────────────────────────────
 st.title("💰 Personal Finance Manager")
-st.caption("AI-powered spending insights for your bank transactions")
+if '🇰🇿' in data_source:
+    st.caption("AI-powered spending insights | Powered by Kaspi-style PFM analytics 🇰🇿")
+else:
+    st.caption("AI-powered spending insights for your bank transactions 🇮🇳")
 
 # ── KPI Cards ─────────────────────────────────────────────
 col1, col2, col3, col4 = st.columns(4)
@@ -74,13 +92,13 @@ total_tx = len(filtered)
 
 with col1:
     st.metric("💵 Total Income",
-              f"₹{total_income:,.0f}")
+              f"{currency}{total_income:,.0f}")
 with col2:
     st.metric("💸 Total Spent",
-              f"₹{total_spent:,.0f}")
+              f"{currency}{total_spent:,.0f}")
 with col3:
     st.metric("📊 Net Balance",
-              f"₹{net_balance:,.0f}",
+              f"{currency}{net_balance:,.0f}",
               delta=f"{'Positive' if net_balance > 0 else 'Negative'}")
 with col4:
     st.metric("🔢 Transactions",
@@ -189,12 +207,15 @@ st.divider()
 
 # ── AI Insights ───────────────────────────────────────────
 st.subheader("🤖 AI Financial Advisor")
-st.caption("Powered by Llama 3 — analyzes your spending and gives personalized advice")
+if '🇰🇿' in data_source:
+    st.caption("Powered by Llama 3 — analyzing your spending in Kazakhstani Tenge (₸) context")
+else:
+    st.caption("Powered by Llama 3 — analyzes your spending and gives personalized advice")
 
 if st.button("💡 Generate AI Insights", type="primary"):
     with st.spinner("Analyzing your spending patterns..."):
 
-        # ── Exclude non-real spending categories ──────────
+        # ── Exclude non-real spending ─────────────────────
         EXCLUDE_CATEGORIES = ['Transfer', 'ATM & Cash', 'Other']
 
         real_spending = filtered[
@@ -213,14 +234,11 @@ if st.button("💡 Generate AI Insights", type="primary"):
         debit_summary.columns = ['Category', 'Total Spent', 'Transactions']
         debit_summary = debit_summary.sort_values('Total Spent', ascending=False)
 
-        # Real spending total
         real_total_spent = real_spending['AMOUNT'].abs().sum()
 
-        # Savings rate based on real spending
         savings_rate = ((total_income - real_total_spent) / total_income * 100
                         if total_income > 0 else 0)
 
-        # Top 3 merchants by real spending
         top_merchant = (
             real_spending
             .groupby('TRANSACTION DETAILS')['AMOUNT']
@@ -231,12 +249,32 @@ if st.button("💡 Generate AI Insights", type="primary"):
             .reset_index()
         )
 
-        # ── Build prompt ───────────────────────────────────
-        prompt = f"""You are a personal finance advisor analyzing bank transactions.
+        # ── Context based on dataset ──────────────────────
+        if '🇰🇿' in data_source:
+            context = "Kazakhstan (₸ Tenge)"
+            bank_context = "Kaspi Bank, Halyk Bank, Freedom Bank, Jusan Bank"
+            local_tips = """
+Local context for Kazakhstan:
+- Average salary in Almaty: ₸350,000-500,000/month
+- Kaspi RED card is widely used for installments
+- Common apps: Kaspi.kz, Halyk Home, Freedom Bank
+- Popular delivery: Glovo, Wolt
+- Popular transport: inDrive, Yandex Go
+"""
+        else:
+            context = "India (₹ Rupee)"
+            bank_context = "SBI, HDFC, ICICI, Axis Bank"
+            local_tips = ""
 
-INCOME: ₹{total_income:,.0f}
-REAL SPENDING (excl. transfers & ATM): ₹{real_total_spent:,.0f}
-NET BALANCE: ₹{net_balance:,.0f}
+        # ── Build prompt ───────────────────────────────────
+        prompt = f"""You are a personal finance advisor for a {context} bank customer.
+Amounts are in {currency}.
+Local banks for reference: {bank_context}.
+{local_tips}
+
+INCOME: {currency}{total_income:,.0f}
+REAL SPENDING (excl. transfers & ATM): {currency}{real_total_spent:,.0f}
+NET BALANCE: {currency}{net_balance:,.0f}
 SAVINGS RATE: {savings_rate:.1f}%
 TOTAL TRANSACTIONS: {total_tx}
 SELECTED ACCOUNT: {selected_account}
@@ -262,7 +300,7 @@ Format with clear sections and bullet points."""
             messages=[
                 {
                     "role": "system",
-                    "content": "You are an expert personal finance advisor. Give specific, actionable advice based on real transaction data."
+                    "content": f"You are an expert personal finance advisor for {context}. Give specific, actionable advice based on real transaction data."
                 },
                 {
                     "role": "user",
@@ -302,4 +340,4 @@ Format with clear sections and bullet points."""
             }
         ))
         st.plotly_chart(fig_gauge, use_container_width=True)
-        st.caption("🎯 Financial advisors recommend saving at least 20% of income")
+        st.caption("Target: Save at least 20% of income every month")
