@@ -1,3 +1,15 @@
+import os
+from kz_simulator import generate_all_profiles
+
+# Generate KZ data if not exists
+if not os.path.exists('kz_transactions.csv'):
+    generate_all_profiles(months=12)
+
+
+
+
+
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -15,7 +27,14 @@ st.set_page_config(
 
 # ── Groq client ───────────────────────────────────────────
 load_dotenv()
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+# Works both locally (.env) and on Streamlit Cloud (secrets)
+try:
+    api_key = st.secrets["GROQ_API_KEY"]
+except:
+    api_key = os.getenv("GROQ_API_KEY")
+
+client = Groq(api_key=api_key)
 
 # ── Load data ─────────────────────────────────────────────
 @st.cache_data
