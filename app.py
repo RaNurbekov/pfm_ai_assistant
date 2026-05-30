@@ -195,15 +195,94 @@ with col2:
 
 st.divider()
 
-# ── Recent Transactions ───────────────────────────────────
-st.subheader("📋 Recent Transactions")
-recent = (filtered
-          .sort_values('DATE', ascending=False)
-          .head(20)[['DATE', 'TRANSACTION DETAILS',
-                      'CATEGORY', 'TYPE', 'AMOUNT']])
-st.dataframe(recent, use_container_width=True)
+# ── Spending Forecast ─────────────────────────────────────
+st.subheader("🔮 Spending Forecast — Next 3 Months")
+st.caption("Prophet ML model predicts future spending based on your historical patterns")
 
-st.divider()
+from forecaster import (prepare_forecast_data, run_forecast,
+                        build_forecast_chart, get_forecast_insights)
+
+# Category selector for forecast
+forecast_categories = ['All Categories'] + [
+    c for c in filtered['CATEGORY'].unique()
+    if c not in ['Transfer', 'ATM & Cash', 'Other']
+]
+selected_forecast_cat = st.selectbox(
+    "Forecast for category:",
+    forecast_categories
+)
+
+if st.button("🔮 Run Forecast", type="secondary"):
+    with st.spinner("Training Prophet model on your spending history..."):
+
+        # Prepare data
+        monthly_data = prepare_forecast_data(
+            filtered,
+            category=selected_forecast_cat
+        )
+
+        if len(monthly_data) < 3:
+            st.warning("⚠️ Not enough data for forecast. Need at least 3 months of history.")
+        else:
+            # Run Prophet
+            model, forecast = run_forecast(monthly_data, periods=3)
+
+            if forecast is not None:
+                # Build chart
+                fig_forecast = build_forecast_chart(
+                    monthly_data, forecast, currency
+                )
+                st.plotly_chart(fig_forecast, use_container_width=True)
+
+                # Get insights
+                insights = get_forecast_insights(
+                    monthly_data, forecast, currency
+                )
+
+                if insights:
+                    # Forecast KPI cards
+                    st.subheader("📊 Forecast Summary")
+                    fc1, fc2, fc3 = st.columns(3)
+
+                    with fc1:
+                        st.metric(
+                            f"🗓️ {insights['next_month_date']}",
+                            f"{currency}{insights['next_month_predicted']:,.0f}",
+                            delta=f"{insights['pct_change']:+.1f}% vs avg"
+                        )
+                    with fc2:
+                        st.metric(
+                            "📉 Lower Bound (80%)",
+                            f"{currency}{insights['next_month_lower']:,.0f}"
+                        )
+                    with fc3:
+                        st.metric(
+                            "📈 Upper Bound (80%)",
+                            f"{currency}{insights['next_month_upper']:,.0f}"
+                        )
+
+                    # Trend alert
+                    if insights['trend'] == 'increasing':
+                        st.warning(
+                            f"⚠️ **Spending is trending UP** — "
+                            f"next month predicted {insights['pct_change']:+.1f}% "
+                            f"above your average of "
+                            f"{currency}{insights['avg_actual']:,.0f}. "
+                            f"Consider adjusting your budget."
+                        )
+                    elif insights['trend'] == 'decreasing':
+                        st.success(
+                            f"✅ **Spending is trending DOWN** — "
+                            f"next month predicted {insights['pct_change']:+.1f}% "
+                            f"below your average. Great financial discipline!"
+                        )
+                    else:
+                        st.info(
+                            f"📊 **Spending is STABLE** — "
+                            f"next month predicted around "
+                            f"{currency}{insights['next_month_predicted']:,.0f}. "
+                            f"Consistent spending pattern detected."
+                        )
 
 # ── AI Insights ───────────────────────────────────────────
 st.subheader("🤖 AI Financial Advisor")

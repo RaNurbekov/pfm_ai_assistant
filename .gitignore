@@ -1,5 +1,5 @@
 .env
-bank_transactions_clean.csv
-bank_transactions.csv
+secrets.toml
 __pycache__/
-.venv/
+.vscode/
+*.csv
