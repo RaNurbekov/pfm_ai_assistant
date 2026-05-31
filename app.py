@@ -218,6 +218,141 @@ st.dataframe(recent, use_container_width=True)
 
 st.divider()
 
+st.divider()
+
+# ── Budget Tracker ────────────────────────────────────────
+st.subheader("🎯 Budget Tracker")
+st.caption("Set monthly limits per category and track your progress")
+
+from budget_tracker import (load_budgets, save_budgets,
+                             calculate_spending_vs_budget)
+
+budgets = load_budgets()
+
+# ── Budget Setup ──────────────────────────────────────────
+with st.expander("⚙️ Set Monthly Budgets", expanded=False):
+    st.write("Set your monthly spending limit for each category:")
+
+    # Get all real categories
+    real_categories = [
+        c for c in filtered['CATEGORY'].unique()
+        if c not in ['Transfer', 'ATM & Cash', 'Other']
+    ]
+
+    cols = st.columns(2)
+    new_budgets = {}
+
+    for i, category in enumerate(sorted(real_categories)):
+        with cols[i % 2]:
+            current_budget = budgets.get(category, 0)
+            new_budget = st.number_input(
+                f"{category}",
+                min_value=0,
+                max_value=10_000_000,
+                value=int(current_budget),
+                step=1000,
+                key=f"budget_{category}"
+            )
+            if new_budget > 0:
+                new_budgets[category] = new_budget
+
+    if st.button("💾 Save Budgets", type="primary"):
+        save_budgets(new_budgets)
+        st.success("✅ Budgets saved!")
+        st.rerun()
+
+# ── Budget vs Actual ──────────────────────────────────────
+if budgets:
+    budget_df = calculate_spending_vs_budget(
+        filtered, budgets, currency
+    )
+
+    if not budget_df.empty:
+
+        # Summary KPIs
+        over_budget = budget_df[
+            budget_df['Status'] == '🔴 Over Budget'
+        ]
+        on_track = budget_df[
+            budget_df['Status'].isin(['🟢 Good', '🟡 On Track'])
+        ]
+
+        b1, b2, b3 = st.columns(3)
+        with b1:
+            st.metric(
+                "🔴 Over Budget",
+                len(over_budget),
+                delta=f"{len(over_budget)} categories need attention"
+                if len(over_budget) > 0 else "All good!"
+            )
+        with b2:
+            st.metric("🟢 On Track", len(on_track))
+        with b3:
+            total_budget = budget_df['Budget'].sum()
+            total_actual = budget_df['Actual'].sum()
+            overall_pct = (
+                total_actual / total_budget * 100
+                if total_budget > 0 else 0
+            )
+            st.metric(
+                "📊 Overall Budget Used",
+                f"{overall_pct:.1f}%",
+                delta=f"{currency}{total_actual:,.0f} of {currency}{total_budget:,.0f}"
+            )
+
+        st.subheader("📊 Budget Progress by Category")
+
+        # Progress bars for each category
+        for _, row in budget_df.iterrows():
+            if row['Budget'] > 0:
+                col1, col2 = st.columns([3, 1])
+
+                with col1:
+                    pct = min(row['Used %'], 100)
+                    color = (
+                        'red' if row['Used %'] > 100 else
+                        'orange' if row['Used %'] > 80 else
+                        'green'
+                    )
+                    st.write(f"**{row['Category']}** {row['Status']}")
+                    st.progress(pct / 100)
+
+                with col2:
+                    st.write(
+                        f"{currency}{row['Actual']:,.0f} / "
+                        f"{currency}{row['Budget']:,.0f}"
+                    )
+                    if row['Remaining'] >= 0:
+                        st.caption(
+                            f"✅ {currency}{row['Remaining']:,.0f} left"
+                        )
+                    else:
+                        st.caption(
+                            f"❌ {currency}{abs(row['Remaining']):,.0f} over!"
+                        )
+
+        # Full table
+        st.subheader("📋 Budget Summary Table")
+        display_df = budget_df.copy()
+        display_df['Budget'] = display_df['Budget'].apply(
+            lambda x: f"{currency}{x:,.0f}"
+        )
+        display_df['Actual'] = display_df['Actual'].apply(
+            lambda x: f"{currency}{x:,.0f}"
+        )
+        display_df['Remaining'] = display_df['Remaining'].apply(
+            lambda x: f"{currency}{x:,.0f}"
+        )
+        display_df['Used %'] = display_df['Used %'].apply(
+            lambda x: f"{x:.1f}%"
+        )
+        st.dataframe(display_df, use_container_width=True)
+
+else:
+    st.info(
+        "👆 Click **Set Monthly Budgets** above to set your spending limits!"
+    )
+
 # ── Anomaly Detection ─────────────────────────────────────
 st.subheader("🚨 Anomaly Detection")
 st.caption("Automatically flags suspicious transactions using Z-Score, Velocity Check and pattern analysis")
