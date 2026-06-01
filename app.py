@@ -736,3 +736,125 @@ Be specific with numbers. Keep concise and practical."""
         ))
         st.plotly_chart(fig_gauge, use_container_width=True)
         st.caption("🎯 Financial advisors recommend saving at least 20% of income")
+
+
+st.divider()
+
+# ── PDF Report Generator ──────────────────────────────────
+st.subheader("📄 Download Financial Report")
+st.caption("Generate a professional PDF report with charts, insights and anomaly summary")
+
+from pdf_report import generate_pdf_report
+
+col1, col2 = st.columns(2)
+
+with col1:
+    include_ai = st.checkbox("Include AI Insights", value=True)
+    include_budget = st.checkbox("Include Budget Status", value=True)
+
+with col2:
+    include_anomaly = st.checkbox("Include Anomaly Summary", value=True)
+    report_title = st.text_input(
+        "Report Title",
+        value=f"Financial Report — {selected_account}"
+    )
+
+if st.button("📄 Generate PDF Report", type="primary"):
+    with st.spinner("Generating your PDF report..."):
+
+        # Get AI insights if needed
+        report_ai_insights = None
+        if include_ai:
+            try:
+                EXCLUDE = ['Transfer', 'ATM & Cash', 'Other']
+                real_spending = filtered[
+                    (filtered['TYPE'] == 'DEBIT') &
+                    (~filtered['CATEGORY'].isin(EXCLUDE))
+                ]
+
+                real_total_spent = real_spending['AMOUNT'].abs().sum()
+                savings_rate = (
+                    (total_income - real_total_spent) / total_income * 100
+                    if total_income > 0 else 0
+                )
+
+                cat_summary = (
+                    real_spending
+                    .groupby('CATEGORY')['AMOUNT']
+                    .sum()
+                    .abs()
+                    .reset_index()
+                    .sort_values('AMOUNT', ascending=False)
+                )
+
+                prompt = f"""Provide a brief financial analysis report.
+Income: {currency}{total_income:,.0f}
+Spent: {currency}{real_total_spent:,.0f}
+Savings Rate: {savings_rate:.1f}%
+Top Categories: {cat_summary.head(5).to_string(index=False)}
+
+Give 3 key insights and 3 recommendations. Be concise."""
+
+                ai_response = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are a financial advisor. Write a concise report section. No markdown symbols."
+                        },
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.3,
+                    max_tokens=500
+                )
+                report_ai_insights = ai_response.choices[0].message.content
+
+            except Exception as e:
+                report_ai_insights = f"AI insights unavailable: {str(e)}"
+
+        # Get anomaly summary if needed
+        report_anomaly_summary = None
+        if include_anomaly:
+            try:
+                from anomaly_detector import detect_anomalies, get_anomaly_summary
+                df_anom = detect_anomalies(filtered)
+                report_anomaly_summary = get_anomaly_summary(df_anom)
+            except Exception:
+                report_anomaly_summary = None
+
+        # Generate PDF
+        try:
+            pdf_bytes = generate_pdf_report(
+                filtered_df=filtered,
+                total_income=total_income,
+                total_spent=total_spent,
+                net_balance=net_balance,
+                total_tx=total_tx,
+                currency=currency,
+                data_source=data_source,
+                selected_account=selected_account,
+                ai_insights=report_ai_insights if include_ai else None,
+                budgets=budgets if include_budget else None,
+                anomaly_summary=report_anomaly_summary
+                if include_anomaly else None
+            )
+
+            from datetime import datetime
+            filename = (
+                f"PFM_Report_{selected_account}_"
+                f"{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+            )
+
+            st.success("✅ Report generated successfully!")
+
+            st.download_button(
+                label="⬇️ Download PDF Report",
+                data=pdf_bytes,
+                file_name=filename,
+                mime="application/pdf",
+                type="primary"
+            )
+
+        except Exception as e:
+            st.error(f"❌ Error generating PDF: {str(e)}")
+            st.info("Make sure kaleido is installed: pip install kaleido")
