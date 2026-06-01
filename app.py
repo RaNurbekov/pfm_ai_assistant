@@ -514,6 +514,100 @@ if st.button("🔮 Run Forecast", type="secondary"):
 
 st.divider()
 
+
+st.divider()
+
+# ── Voice Insights ────────────────────────────────────────
+st.subheader("🎙️ Voice Financial Assistant")
+st.caption(
+    "Ask questions about your spending in Russian or English — "
+    "powered by Whisper + Llama 3"
+)
+
+from voice_insights import (transcribe_audio,
+                             answer_finance_question,
+                             text_to_speech)
+
+# Example questions
+st.write("**💡 Example questions you can ask:**")
+ex1, ex2, ex3 = st.columns(3)
+with ex1:
+    st.info("🇷🇺 Сколько я потратил на еду?")
+with ex2:
+    st.info("🇷🇺 Какая моя самая большая трата?")
+with ex3:
+    st.info("🇬🇧 What is my savings rate?")
+
+# Input method selector
+input_method = st.radio(
+    "Input method:",
+    ['🎤 Voice (Record)', '⌨️ Text'],
+    horizontal=True
+)
+
+if input_method == '🎤 Voice (Record)':
+    st.write("Click the microphone to record your question:")
+    
+    audio_input = st.audio_input("🎤 Record your question")
+    
+    if audio_input is not None:
+        audio_bytes = audio_input.read()
+        
+        with st.spinner("🎧 Transcribing with Whisper..."):
+            question = transcribe_audio(audio_bytes, client)
+        
+        if question and not question.startswith("Transcription error"):
+            st.success(f"📝 You asked: **{question}**")
+            
+            with st.spinner("🧠 Analyzing your finances..."):
+                answer = answer_finance_question(
+                    question=question,
+                    filtered_df=filtered,
+                    budgets=budgets,
+                    currency=currency,
+                    data_source=data_source,
+                    client=client
+                )
+            
+            st.subheader("💬 Answer:")
+            st.write(answer)
+            
+            # Text to speech
+            with st.spinner("🔊 Generating voice response..."):
+                audio_response = text_to_speech(answer, client)
+            
+            if audio_response:
+                st.audio(audio_response, format='audio/mp3', autoplay=True)
+        else:
+            st.error(f"❌ {question}")
+
+else:
+    # Text input mode
+    text_question = st.text_input(
+        "Type your question:",
+        placeholder="Сколько я потратил на еду в этом месяце?"
+    )
+    
+    if st.button("💬 Ask", type="secondary") and text_question:
+        with st.spinner("🧠 Analyzing your finances..."):
+            answer = answer_finance_question(
+                question=text_question,
+                filtered_df=filtered,
+                budgets=budgets,
+                currency=currency,
+                data_source=data_source,
+                client=client
+            )
+        
+        st.subheader("💬 Answer:")
+        st.write(answer)
+        
+        with st.spinner("🔊 Generating voice response..."):
+            audio_response = text_to_speech(answer, client)
+        
+        if audio_response:
+            st.audio(audio_response, format='audio/mp3', autoplay=True)
+
 # ── AI Financial Advisor ──────────────────────────────────
 st.subheader("🤖 AI Financial Advisor")
 if '🇰🇿' in data_source:
