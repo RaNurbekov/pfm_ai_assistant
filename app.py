@@ -858,3 +858,60 @@ Give 3 key insights and 3 recommendations. Be concise."""
         except Exception as e:
             st.error(f"❌ Error generating PDF: {str(e)}")
             st.info("Make sure kaleido is installed: pip install kaleido")
+
+st.divider()
+
+# ── Telegram Bot ──────────────────────────────────────────
+st.subheader("📱 Telegram Weekly Report")
+st.caption("Get automatic weekly spending reports in your Telegram")
+
+tg1, tg2 = st.columns(2)
+
+with tg1:
+    st.info("""
+**How it works:**
+1. Bot sends every Monday at 9:00 AM
+2. Shows weekly income vs spending
+3. Top 5 spending categories
+4. Top 3 merchants
+5. AI-generated insight
+    """)
+
+with tg2:
+    st.success("""
+**Setup:**
+1. Find @BotFather in Telegram
+2. Create new bot → get TOKEN
+3. Add TOKEN to .env file
+4. Run: `python telegram_bot.py test`
+    """)
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    if st.button("📱 Send Test Message", type="secondary"):
+        with st.spinner("Sending test message..."):
+            try:
+                import asyncio
+                from telegram_bot import send_test_message
+                asyncio.run(send_test_message())
+                st.success("✅ Test message sent! Check Telegram!")
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)}")
+                st.info("Check TELEGRAM_TOKEN and TELEGRAM_CHAT_ID in .env")
+
+with col2:
+    if st.button("📊 Send Report Now", type="secondary"):
+        with st.spinner("Generating and sending report..."):
+            try:
+                import asyncio
+                from telegram_bot import send_weekly_report
+                asyncio.run(send_weekly_report())
+                st.success("✅ Report sent! Check Telegram!")
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)}")
+
+with col3:
+    if st.button("⏰ Start Scheduler", type="primary"):
+        st.info("""
+To start the weekly scheduler run in terminal:
